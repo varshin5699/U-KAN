@@ -132,7 +132,9 @@ def parse_args():
 
 def train(config, train_loader, model, criterion, optimizer):
     avg_meters = {'loss': AverageMeter(),
-                  'iou': AverageMeter()}
+                  'iou': AverageMeter(),
+                  'recall': AverageMeter(),
+                  'precision': AverageMeter() }
 
     model.train()
 
@@ -165,23 +167,31 @@ def train(config, train_loader, model, criterion, optimizer):
 
         avg_meters['loss'].update(loss.item(), input.size(0))
         avg_meters['iou'].update(iou, input.size(0))
-
+        avg_meters['recall'].update(recall_, input.size(0))
+        avg_meters['precision'].update(precision_, input.size(0))
+        
         postfix = OrderedDict([
             ('loss', avg_meters['loss'].avg),
             ('iou', avg_meters['iou'].avg),
+            ('recall', avg_meters['recall'].avg),
+            ('precision', avg_meters['precison'].avg)
         ])
         pbar.set_postfix(postfix)
         pbar.update(1)
     pbar.close()
 
     return OrderedDict([('loss', avg_meters['loss'].avg),
-                        ('iou', avg_meters['iou'].avg)])
+                        ('iou', avg_meters['iou'].avg),
+                        ('recall', avg_meters['recall'].avg),
+                        ('precision', avg_meters['precison'].avg)])
 
 
 def validate(config, val_loader, model, criterion):
     avg_meters = {'loss': AverageMeter(),
                   'iou': AverageMeter(),
-                   'dice': AverageMeter()}
+                   'dice': AverageMeter(),
+                   'recall': AverageMeter(),
+                  'precision': AverageMeter() }
 
     # switch to evaluate mode
     model.eval()
@@ -200,19 +210,25 @@ def validate(config, val_loader, model, criterion):
                     loss += criterion(output, target)
                 loss /= len(outputs)
                 iou, dice, _ = iou_score(outputs[-1], target)
+                iou_, dice_, hd_, hd95_, recall_, specificity_, precision_ = indicators(output, target)
             else:
                 output = model(input)
                 loss = criterion(output, target)
                 iou, dice, _ = iou_score(output, target)
+                iou_, dice_, hd_, hd95_, recall_, specificity_, precision_ = indicators(output, target)
 
             avg_meters['loss'].update(loss.item(), input.size(0))
             avg_meters['iou'].update(iou, input.size(0))
             avg_meters['dice'].update(dice, input.size(0))
+            avg_meters['recall'].update(recall_, input.size(0))
+            avg_meters['precision'].update(precision_, input.size(0))
 
             postfix = OrderedDict([
                 ('loss', avg_meters['loss'].avg),
                 ('iou', avg_meters['iou'].avg),
-                ('dice', avg_meters['dice'].avg)
+                ('dice', avg_meters['dice'].avg),
+                ('recall', avg_meters['recall'].avg),
+                ('precision', avg_meters['precison'].avg)
             ])
             pbar.set_postfix(postfix)
             pbar.update(1)
@@ -221,7 +237,9 @@ def validate(config, val_loader, model, criterion):
 
     return OrderedDict([('loss', avg_meters['loss'].avg),
                         ('iou', avg_meters['iou'].avg),
-                        ('dice', avg_meters['dice'].avg)])
+                        ('dice', avg_meters['dice'].avg),
+                        ('recall', avg_meters['recall'].avg),
+                        ('precision', avg_meters['precison'].avg)])
 
 def seed_torch(seed=1029):
     random.seed(seed)
@@ -365,9 +383,13 @@ def main():
         ('lr', []),
         ('loss', []),
         ('iou', []),
+        ('recall', []),
+        ('precision', []),
         ('val_loss', []),
         ('val_iou', []),
         ('val_dice', []),
+        ('val_recall', []),
+        ('val_precision', [])
     ])
 
 
@@ -394,18 +416,27 @@ def main():
         log['lr'].append(config['lr'])
         log['loss'].append(train_log['loss'])
         log['iou'].append(train_log['iou'])
+        log['recall'].append(train_log['recall'])
+        log['precision'].append(train_log['precision'])
         log['val_loss'].append(val_log['loss'])
         log['val_iou'].append(val_log['iou'])
         log['val_dice'].append(val_log['dice'])
+        log['val_recall'].append(val_log['recall'])
+        log['val_precision'].append(val_log['precision'])
 
+        
         pd.DataFrame(log).to_csv(f'{output_dir}/{exp_name}/log.csv', index=False)
 
         my_writer.add_scalar('train/loss', train_log['loss'], global_step=epoch)
         my_writer.add_scalar('train/iou', train_log['iou'], global_step=epoch)
+        my_writer.add_scalar('train/recall', train_log['recall'], gloabal_step=epoch)
+        my_writer.add_scalar('train/precision', train_log['precision'], global_step=epoch)
         my_writer.add_scalar('val/loss', val_log['loss'], global_step=epoch)
         my_writer.add_scalar('val/iou', val_log['iou'], global_step=epoch)
         my_writer.add_scalar('val/dice', val_log['dice'], global_step=epoch)
-
+        my_writer.add_scalar('val/recall', val_log['recall'], gloabal_step=epoch)
+        my_writer.add_scalar('val/precision', val_log['precision'], global_step=epoch)
+        
         my_writer.add_scalar('val/best_iou_value', best_iou, global_step=epoch)
         my_writer.add_scalar('val/best_dice_value', best_dice, global_step=epoch)
 
